@@ -1,0 +1,14 @@
+data/
+logs/
+.env
+.env.*
+*secret*
+*.db
+*.db-*
+*.key
+*.pem
+*deploy_key*
+keys/
+runtime/
+node_modules/
+__pycache__/
