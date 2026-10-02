@@ -11,4 +11,4 @@
 - 配置公开 GitHub `owner/repo` 后，每次启动匿名检查 latest Release，只提示，不自动执行下载代码。
 - /api/updates/check 会可能触发后端可信更新；UI 有明确确认提示，更新控制不在浏览器执行。
 
-当前尚未创建 GitHub 远端仓库，没有虚构仓库 URL，也没有真实 Release。
+公共仓库 `wangct233-source/multi-gateway-proxy-ui` 已创建（main 已推送，匿名可读）；**GitHub Release 尚未发布**，Release 自动检查在真实 Release 发布前不会命中，也未做过真实 Release 端到端验收。
