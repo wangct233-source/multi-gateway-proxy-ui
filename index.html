@@ -58,14 +58,25 @@
         </nav>
 
         <section id="panel-accounts" class="card tab-panel" role="tabpanel" aria-labelledby="tab-accounts">
-          <h2>账号池</h2><p class="hint">只管理环境变量引用，不采集、显示或保存上游 token。启用账号不等于启用自动任务。</p>
-          <p id="accounts-status" class="muted">未加载</p><p id="accounts-error" class="notice danger" role="alert" hidden></p>
-          <div class="table-wrap"><table><thead><tr><th>账号 ID / Provider ID</th><th>状态</th><th>环境引用</th><th>运行中</th><th>冷却截止</th><th>操作</th></tr></thead><tbody id="accounts-body"></tbody></table></div>
-          <form id="account-form" class="subform">
-            <h3>添加账号</h3>
-            <div class="form-grid"><label>账号 ID<input id="account-id" required maxlength="128" autocomplete="off" spellcheck="false"></label><label>provider_account_id<input id="provider-account-id" required maxlength="256" autocomplete="off" spellcheck="false"></label><label>secret_ref（仅 env 引用）<input id="secret-ref" required placeholder="env:PROVIDER_ACCOUNT_TOKEN" pattern="env:[A-Za-z_][A-Za-z0-9_]*" autocomplete="off" spellcheck="false"><small>实际密钥在后端环境变量中配置，勿粘贴 token。</small></label></div>
-            <p class="hint">将提交 enabled:true；不会自动开启网关任务。</p><button id="add-account" type="submit" class="backend-write" disabled>添加账号</button>
+          <h2>账号池</h2><p class="hint">密钥只存后端数据库，页面不显示、不上传 GitHub。停用旧测试账号可避免它们对真实上游报 401。</p>
+          <div id="login-zone" class="login-zone">
+            <h3>账号登录（CodeBuddy）</h3>
+            <p class="hint">点击生成登录链接，在浏览器完成登录后账号自动入库（10 分钟内有效）。</p>
+            <div class="update-actions">
+              <button id="account-login" type="button" class="primary backend-write" disabled>生成登录链接</button>
+              <a id="login-link" target="_blank" rel="noopener noreferrer" referrerpolicy="no-referrer" hidden>打开登录页 ↗</a>
+            </div>
+            <p id="login-status" class="notice neutral" role="status" hidden></p>
+          </div>
+          <form id="import-form" class="subform">
+            <h3>导入账号（支持 A / A2 / B / C 账号池 JSON）</h3>
+            <p class="hint">选择一个或多个 .json 文件，或直接粘贴 JSON（单对象或数组均可）。自动识别 accessToken / token / apiKey 格式；uid 自动从令牌提取。</p>
+            <label>账号 JSON 文件<input id="import-file" type="file" accept=".json,application/json" multiple></label>
+            <label>或粘贴 JSON<textarea id="import-text" rows="4" spellcheck="false" placeholder='[{"accessToken":"eyJ..."}] 或 {"apiKey":"...","secret":"..."}'></textarea></label>
+            <button id="import-accounts" type="submit" class="backend-write" disabled>导入账号</button>
           </form>
+          <p id="accounts-status" class="muted">未加载</p><p id="accounts-error" class="notice danger" role="alert" hidden></p>
+          <div class="table-wrap"><table><thead><tr><th>账号 ID / Provider ID</th><th>状态</th><th>来源</th><th>运行中</th><th>冷却截止</th><th>操作</th></tr></thead><tbody id="accounts-body"></tbody></table></div>
         </section>
 
         <section id="panel-egress" class="card tab-panel" role="tabpanel" aria-labelledby="tab-egress" hidden>

@@ -35,9 +35,24 @@ function drawMetrics(g) {
   [['状态',g.status],['在途 / 配置并发',g.active+' / '+g.concurrency],['排队 / 上限',g.queued+' / '+g.queue_limit],['账号',g.accounts]].forEach(([label,value])=>{const d=document.createElement('div'); const p=document.createElement('p'); p.textContent=label; const s=document.createElement('strong');s.textContent=value;d.append(p,s);$('gateway-metrics').append(d);});
   notice('gateway-last-error',g.last_error);
 }
+let loginTimer=null;
+function stopLoginPoll(){if(loginTimer){clearTimeout(loginTimer);loginTimer=null;}}
+async function pollLogin(gid,st){
+  try{
+    const r=await api(gwPath()+'/accounts/login-status?state='+encodeURIComponent(st));
+    if(r.status==='ok'){notice('login-status','登录成功，账号已入库。','success');stopLoginPoll();await refreshSelected();return;}
+    if(r.status==='expired'){notice('login-status','链接已过期，请重新生成。','warning');stopLoginPoll();return;}
+    if(r.status==='error'){notice('login-status','登录失败：'+(r.message||'未知错误'),'danger');stopLoginPoll();return;}
+    notice('login-status','等待浏览器登录…（链接 10 分钟内有效）','neutral');
+  }catch(e){notice('login-status','查询失败：'+e.message,'danger');stopLoginPoll();return;}
+  loginTimer=setTimeout(()=>pollLogin(gid,st),3000);
+}
 function drawAccounts(data) {
   $('accounts-body').replaceChildren(); const choice=$('task-account');choice.replaceChildren();const all=document.createElement('option');all.value='';all.textContent='全部账号';choice.append(all);
-  (data.accounts||[]).forEach(a=>{const tr=document.createElement('tr');tr.append(cell(a.id+' / '+a.provider_account_id),cell(a.status+(a.enabled?' · 启用':' · 停用')),cell(a.secret_ref),cell(a.in_flight),cell(date(a.cooldown_until)));const td=cell('');td.append(button(a.enabled?'停用':'启用',()=>wrap('accounts-error',async()=>{await api(gwPath()+'/accounts/'+encodeURIComponent(a.id),'PATCH',{enabled:!a.enabled});await refreshSelected();})));tr.append(td);$('accounts-body').append(tr);const o=document.createElement('option');o.value=a.id;o.textContent=a.id;choice.append(o);}); $('accounts-status').textContent=(data.accounts||[]).length+' 个账号；密钥引用不会展示密钥值。';
+  (data.accounts||[]).forEach(a=>{const tr=document.createElement('tr');tr.append(cell(a.id+' / '+a.provider_account_id),cell(a.status+(a.enabled?' · 启用':' · 停用')),cell(a.source),cell(a.in_flight),cell(date(a.cooldown_until)));const td=cell('');td.append(button(a.enabled?'停用':'启用',()=>wrap('accounts-error',async()=>{await api(gwPath()+'/accounts/'+encodeURIComponent(a.id),'PATCH',{enabled:!a.enabled});await refreshSelected();})));tr.append(td);$('accounts-body').append(tr);const o=document.createElement('option');o.value=a.id;o.textContent=a.id;choice.append(o);}); $('accounts-status').textContent=(data.accounts||[]).length+' 个账号；密钥值不会显示。';
+  // 登录区仅 CodeBuddy 网关显示
+  $('login-zone').style.display=(state.gateway==='a-cn'||state.gateway==='a-intl')?'':'none';
+  if(state.gateway!=='a-cn'&&state.gateway!=='a-intl')stopLoginPoll();
 }
 function drawEgress(data) { $('egress-body').replaceChildren();(data.egress||[]).forEach(e=>{const tr=document.createElement('tr');[e.id,e.role,e.configured?'是':'否',e.healthy?'健康':'不可用',e.error].forEach(v=>tr.append(cell(v)));$('egress-body').append(tr);});$('egress-status').textContent='固定本网关主出口和可选备用，不能挪用其他网关出口。'; }
 function drawSettings(data) {state.settings=data;const mapping={concurrency:'setting-concurrency',queue_limit:'setting-queue-limit',queue_timeout:'setting-queue-timeout',task_daily_limit:'setting-task-daily-limit',task_window_start:'setting-task-window-start',task_window_end:'setting-task-window-end'};Object.entries(mapping).forEach(([k,id])=>$(id).value=data[k]??'');$('setting-tasks-enabled').checked=!!data.tasks_enabled;$('settings-fields').disabled=false;$('settings-status').textContent='队列超时单位：秒。HTTP 连接池须不小于配置并发。';guard();}
@@ -76,10 +91,36 @@ $('connection-form').addEventListener('submit',e=>{e.preventDefault();wrap('conn
 $('clear-storage').addEventListener('click',()=>{localStorage.removeItem('mgp.connection');state.token='';$('api-token').value='';enabled(false);$('connection-status').textContent='已清除';$('storage-status').textContent='已移除本地 Token。';});
 $('refresh-all').addEventListener('click',()=>wrap('gateway-error',refreshAll));$('refresh-gateway').addEventListener('click',()=>wrap('gateway-error',refreshSelected));
 ['kill-on','kill-off'].forEach(id=>$(id).addEventListener('click',()=>wrap('kill-error',async()=>{if(id==='kill-off'&&!confirm('关闭全局任务杀开关？缺证据能力仍不能执行。'))return;drawKill(await api('/api/v1/tasks/kill-switch','POST',{enabled:id==='kill-on'}));guard();})));
-$('account-form').addEventListener('submit',e=>{e.preventDefault();wrap('accounts-error',async()=>{const ref=$('secret-ref').value.trim();if(!/^env:[A-Za-z_][A-Za-z0-9_]*$/.test(ref))throw Error('只接受 env:NAME，不接受实际密钥');await api(gwPath()+'/accounts','POST',{id:$('account-id').value.trim(),provider_account_id:$('provider-account-id').value.trim(),secret_ref:ref,enabled:true});await refreshSelected();$('account-form').reset();});});
+$('account-login').addEventListener('click',()=>wrap('login-status',async()=>{
+  stopLoginPoll();
+  const r=await api(gwPath()+'/accounts/login-link','POST',{});
+  const link=$('login-link');link.href=r.auth_url;link.hidden=false;
+  notice('login-status','链接已生成：请点击「打开登录页」完成登录，本页会自动检测。','neutral');
+  loginTimer=setTimeout(()=>pollLogin(state.gateway,r.state),3000);
+}));
 $('settings-form').addEventListener('submit',e=>{e.preventDefault();wrap('settings-error',async()=>{const values={concurrency:Number($('setting-concurrency').value),queue_limit:Number($('setting-queue-limit').value),queue_timeout:Number($('setting-queue-timeout').value),task_daily_limit:Number($('setting-task-daily-limit').value),task_window_start:$('setting-task-window-start').value.slice(0,5),task_window_end:$('setting-task-window-end').value.slice(0,5),tasks_enabled:$('setting-tasks-enabled').checked};if(values.tasks_enabled&&!state.settings.tasks_enabled&&!confirm('开启本网关任务配置？仅有证据且显式运行的任务可以执行。'))return;drawSettings(await api(gwPath()+'/settings','PATCH',values));});});
 ['task-type','task-dry-run'].forEach(id=>$(id).addEventListener('change',guard));
 $('task-form').addEventListener('submit',e=>{e.preventDefault();wrap('tasks-error',async()=>{const dry=$('task-dry-run').checked;const kind=$('task-type').value;if(!dry){drawKill(await api('/api/v1/tasks/kill-switch'));drawSettings(await api(gwPath()+'/settings'));drawCaps(await api(gwPath()+'/capabilities'));guard();if($('run-task').disabled||!confirm('仅限本人或获授权账号，确认真实执行？'))return;}const result=await api(gwPath()+'/tasks/'+kind+'/run','POST',{dry_run:dry,account_id:$('task-account').value||null});$('task-result').hidden=false;$('task-result-json').textContent=json(result);$('task-result-summary').textContent=result.dry_run?(result.allowed?'预检允许；尚未执行':'预检未允许；没有执行'):'后端真实结果，需核对服务端状态';drawRuns(await api(gwPath()+'/tasks'));});});
+$('import-form').addEventListener('submit',e=>{e.preventDefault();wrap('accounts-error',async()=>{
+  const text=$('import-text').value.trim();
+  let items=[];
+  if(text){
+    try{const parsed=JSON.parse(text);items=Array.isArray(parsed)?parsed:[parsed];}
+    catch{throw Error('粘贴的内容不是合法 JSON');}
+  }
+  const files=$('import-file').files;
+  for(const f of files){
+    const content=await f.text();
+    try{const parsed=JSON.parse(content);items=items.concat(Array.isArray(parsed)?parsed:[parsed]);}
+    catch{throw Error('文件 '+f.name+' 不是合法 JSON');}
+  }
+  if(!items.length)throw Error('请选择文件或粘贴 JSON');
+  if(items.length>100)throw Error('单次最多导入 100 个账号');
+  const r=await api(gwPath()+'/accounts/import','POST',{items});
+  const detail=(r.errors||[]).map(x=>'#'+x.index+':'+x.reason).join('；');
+  notice('accounts-error',r.imported?('导入成功 '+r.imported+' 个'+(r.skipped?('，跳过 '+r.skipped+' 个（'+(detail||'重复')+'）'):'')+'。'):'全部跳过：'+(detail||'没有可识别的凭据'),'warning');
+  await refreshSelected();
+});});
 $('check-backend-update').addEventListener('click',()=>wrap('update-error',async()=>{drawBackendUpdate({version:state.backendVersion||'0.0.0',updates:await api('/api/updates/check','POST',{})});}));
 $('apply-backend-update').addEventListener('click',()=>wrap('update-error',async()=>{if(!confirm('立即更新到候选版本？期间会优雅排空在途请求并切换代码，服务可能短暂中断；失败会自动回滚。'))return;drawBackendUpdate({version:state.backendVersion||'0.0.0',updates:await api('/api/updates/apply','POST',{})});}));
 document.querySelectorAll('[data-tab]').forEach(b=>b.addEventListener('click',()=>{document.querySelectorAll('[data-tab]').forEach(t=>{const active=t===b;t.setAttribute('aria-selected',String(active));t.tabIndex=active?0:-1;$('panel-'+t.dataset.tab).hidden=!active;});}));

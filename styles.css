@@ -97,6 +97,10 @@ td pre { min-width: 200px; margin-top: 0; max-height: 12rem; }
 .version-line strong { font-size: 2rem; font-weight: 700; letter-spacing: -.02em; overflow-wrap: anywhere; }
 .update-box { display: flex; align-items: center; gap: .6rem; background: #fff9e9; border: 1px solid #ead59b; color: #755212; border-radius: 10px; padding: .7rem 1rem; font-weight: 600; overflow-wrap: anywhere; }
 .update-actions { display: flex; flex-wrap: wrap; align-items: center; gap: .6rem; }
+.login-zone { border: 1px solid var(--line); border-radius: 10px; padding: 1rem; margin-bottom: .6rem; background: #f8fafd; }
+.login-zone .update-actions { margin: .6rem 0; }
+.login-zone a { font-weight: 600; }
+textarea { width: 100%; border: 1px solid #bfcde0; border-radius: 8px; background: #fff; padding: .55rem .7rem; color: var(--ink); font: inherit; min-width: 0; resize: vertical; }
 button.primary { background: #0ca678; font-size: 1.02rem; padding: .7rem 1.5rem; }
 .button-row { margin-top: .8rem; }
 .toast { position: fixed; bottom: 1.25rem; left: 50%; transform: translateX(-50%); max-width: min(90vw, 650px); background: #10243f; color: #fff; border-radius: 10px; padding: .8rem 1.2rem; box-shadow: 0 8px 25px #0003; z-index: 5; overflow-wrap: anywhere; }
