@@ -20,7 +20,7 @@
       <div class="section-head"><h2 id="connection-title">连接与安全</h2><button id="clear-storage" type="button" class="subtle">清除本地配置</button></div>
       <p class="notice warning">Bearer token 可保存在 localStorage。XSS、浏览器扩展或共享本机用户可能读取它；密码框仅隐藏显示，不是加密。共享电脑不要勾选保存，使用最小权限 token，结束后清除配置。</p>
       <form id="connection-form" class="connection-form">
-        <label>后端 baseURL<input id="base-url" type="url" placeholder="http://127.0.0.1:8080" required spellcheck="false" autocomplete="off"><small>仅 HTTPS 或本机 HTTP；无路径、查询参数、凭据。请填写真实后端地址。</small></label>
+        <label>后端 baseURL<input id="base-url" type="url" placeholder="留空 = 当前页面同源（服务器托管）；或填 http://127.0.0.1:端口" spellcheck="false" autocomplete="off"><small>服务器托管模式留空即可。本机模式填无路径、无凭据的 HTTP(S) BaseURL。</small></label>
         <label>管理 Bearer token<input id="api-token" type="password" required autocomplete="off" spellcheck="false" placeholder="仅管理 API token，不是上游账号 token"></label>
         <div class="connect-controls"><label class="check"><input id="remember-config" type="checkbox">保存 baseURL / token 到本机</label><button id="connect-button" type="submit">连接 / 刷新</button></div>
       </form>
@@ -109,9 +109,25 @@
     </div>
 
     <section class="card version-card" aria-labelledby="version-title">
-      <div class="section-head"><h2 id="version-title">版本与更新</h2><button id="check-backend-update" type="button" class="subtle backend-write" disabled>手动检查后端更新</button></div>
-      <p class="hint">UI 与后端独立版本。任何检查都不会自动下载、安装或执行代码；后端更新能力由后端控制，UI 没有执行更新入口。</p>
-      <div class="version-grid"><div><h3>后端版本 / 更新状态</h3><p id="backend-version" class="muted">未加载</p><p id="version-error" class="notice danger" role="alert" hidden></p><details><summary>版本与 updater 原始状态（脱敏）</summary><pre id="backend-update-json">未加载</pre></details><p id="update-error" class="notice danger" role="alert" hidden></p></div><div>
+      <div class="section-head"><h2 id="version-title">版本与更新</h2><span id="update-state-badge" class="badge neutral" role="status">未知</span></div>
+      <p class="hint">两步式更新：检查只报告新版本，不会应用；只有点击「立即更新」才会排空并切换，失败自动回滚。检查与更新都只作用于后端仓库 main 分支。</p>
+      <div class="version-grid"><div class="update-panel">
+        <div class="version-head">
+          <p class="eyebrow">后端当前版本</p>
+          <div class="version-line"><strong id="backend-version-big">—</strong></div>
+          <p id="backend-latest" class="muted">最新版本：连接后检查</p>
+        </div>
+        <div id="update-available-box" class="update-box" hidden><span aria-hidden="true">⬇</span><span id="update-available-text">有新版本可用！</span></div>
+        <div class="update-actions">
+          <button id="apply-backend-update" type="button" class="primary backend-write" hidden>立即更新</button>
+          <button id="check-backend-update" type="button" class="subtle backend-write" disabled>检查更新</button>
+        </div>
+        <a id="backend-update-log" target="_blank" rel="noopener noreferrer" referrerpolicy="no-referrer" hidden>查看更新日志（GitHub Compare）↗</a>
+        <p id="update-state-note" class="notice neutral" role="status" hidden></p>
+        <p id="version-error" class="notice danger" role="alert" hidden></p>
+        <p id="update-error" class="notice danger" role="alert" hidden></p>
+        <details><summary>版本与 updater 原始状态（脱敏）</summary><pre id="backend-update-json">未加载</pre></details>
+      </div><div>
         <h3>UI v0.1.0 · 公开仓库 Release 检查</h3><form id="ui-update-form"><label>UI 公开 GitHub 仓库<input id="ui-repository" placeholder="owner/repo（默认未配置）" autocomplete="off" spellcheck="false"><small>只接受 owner/repo，不使用后端 token、不读取私有仓库。</small></label><div class="button-row"><button type="submit" class="subtle">匿名检查 UI 版本</button><button id="clear-ui-repository" type="button" class="subtle">清除仓库配置</button></div></form><p id="ui-update-status" class="notice neutral" role="status">未配置仓库，不会向 GitHub 发起请求。</p><a id="ui-release-link" target="_blank" rel="noopener noreferrer" referrerpolicy="no-referrer" hidden>手动查看 Release（不自动下载）</a>
       </div></div>
     </section>
