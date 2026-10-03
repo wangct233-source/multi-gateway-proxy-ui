@@ -60,7 +60,7 @@ function drawCaps(data) {state.caps=data.capabilities||{};$('capabilities-list')
 function drawRuns(data) {$('tasks-body').replaceChildren();(data.runs||[]).forEach(r=>{const tr=document.createElement('tr');[r.id+' / '+r.gateway_id,r.task_type+' / '+r.status,date(r.started_at),date(r.finished_at),typeof r.result_json==='string'?r.result_json:json(r.result_json)].forEach(v=>tr.append(cell(v)));$('tasks-body').append(tr);});$('tasks-status').textContent=(data.runs||[]).length+' 条记录（含 dry-run，不等于成功领取）。';}
 function guard() {const c=state.caps[$('task-type').value]||{};const allowed=!state.kill&&state.settings.tasks_enabled&&c.status==='supported'&&Array.isArray(c.evidence)&&c.evidence.length;const dry=$('task-dry-run').checked;$('run-task').disabled=!state.gateway||(!dry&&!allowed);$('run-task').textContent=dry?'运行 dry-run 预检':'请求真实执行';$('task-guard').textContent=dry?'只发送预检，不触发上游。':allowed?'仍须后端检查窗口、额度与幂等。':'缺少开关/证据授权，真实执行已阻断。';}
 async function select(id) {state.gateway=id;const epoch=++state.epoch;state.caps={};state.settings={};['accounts-body','egress-body','tasks-body','capabilities-list','models-body','usage-recent-body'].forEach(key=>$(key).replaceChildren());$('settings-fields').disabled=true;$('task-result').hidden=true;guard();drawGateways({gateways:state.gateways});const g=state.gateways.find(g=>g.id===id);if(g)drawMetrics(g);updateCreditsVisibility();await refreshSelected(epoch);}
-function updateCreditsVisibility(){const isA=state.gateway==='a-cn'||state.gateway==='a-intl';$('query-credits').style.display=isA?'':'none';$('credits-note').textContent=isA?'查询走上游计费域（5 分钟缓存）。':'仅 A-1 腾讯国内 / A-2 腾讯国际有余额查询协议。';}
+function updateCreditsVisibility(){$('query-credits').style.display='';$('credits-note').textContent={ 'a-cn':'查询走腾讯计费域 www.codebuddy.cn（5 分钟缓存）。','a-intl':'查询走国际计费域 www.workbuddy.ai（5 分钟缓存）。','b':'查询走 api.trae.cn：签到状态+积分余量。','c':'需要 start-plan JWT（导入时 metadata 含 jwt 字段）；纯 apiKey 凭据无余额接口。'}[state.gateway]||'';}
 function drawModels(data){$('models-body').replaceChildren();(data.models||[]).forEach(m=>{const tr=document.createElement('tr');tr.append(cell(m));$('models-body').append(tr);});if(!(data.models||[]).length){const tr=document.createElement('tr');tr.append(cell('（未配置模型清单：后端 *_MODELS 环境变量）'));$('models-body').append(tr);}}
 function drawUsage(data){
   $('usage-summary').replaceChildren();
@@ -150,9 +150,18 @@ $('gw-claim').addEventListener('click',()=>wrap('gw-task-status',async()=>{
 }));
 $('query-credits').addEventListener('click',()=>wrap('credits-result',async()=>{
   const r=await api(gwPath()+'/credits');
+  if(r.error)throw Error('HTTP · '+r.error.code+' · '+r.error.message);
   if(!r.available){notice('credits-result',r.note||'上游未返回套餐数据。','warning');return;}
   const c=r.credits;
-  notice('credits-result','剩余 '+c.remain+' / 已用 '+c.used+' / 总量 '+c.size+'（'+c.packages+' 个套餐，账号 '+r.account_id+'，缓存 5 分钟）。','success');
+  let text;
+  if(c.remaining!==undefined&&c.packages&&c.packages[0]&&c.packages[0].unit_type)
+    text='剩余 '+c.remaining+' / 已用 '+c.used+' / 总量 '+c.total+'（'+c.packages.length+' 个套餐包）';
+  else if(c.remaining!==undefined)
+    text='剩余 '+c.remaining+' / 已用 '+c.used+' / 总量 '+c.total_limit;
+  else
+    text='剩余 '+c.remain+' / 已用 '+c.used+' / 总量 '+c.size+'（'+c.packages+' 个套餐）';
+  if(c.checked_in!==undefined)text+='；今日'+(c.checked_in?'已签到':'未签到');
+  notice('credits-result',text+'（账号 '+r.account_id+'，缓存 5 分钟）。','success');
 }));
 $('batch-checkin').addEventListener('click',()=>wrap('batch-status',async()=>{
   if(!confirm('对全部网关执行批量签到？各网关按自己的策略间隔错峰执行，仍受证据与限额约束。'))return;
