@@ -39,8 +39,11 @@ function kpi(label, value, cls = '') {
 function baseUrl(value) {
   const u = new URL(value);
   if (!['http:', 'https:'].includes(u.protocol) || u.username || u.password || u.search || u.hash || !['', '/'].includes(u.pathname)) throw Error('地址须为无路径和凭据的 HTTP(S) BaseURL');
-  if (u.protocol === 'http:' && !['localhost', '127.0.0.1', '[::1]'].includes(u.hostname)) throw Error('远端必须 HTTPS；测试请使用 SSH 本机端口转发');
   return u.origin;
+}
+function isLocalBase(base) {
+  try { return ['localhost', '127.0.0.1', '[::1]'].includes(new URL(base).hostname); }
+  catch { return false; }
 }
 async function api(path, method = 'GET', data) {
   if (!state.base || !state.token) throw Error('请先连接');
@@ -108,6 +111,8 @@ $('connection-form').addEventListener('submit', e => {
     enabled(true);
     setConnected(true, '已登录');
     toast('登录成功', 'ok');
+    if (/^http:\/\//.test(state.base) && !isLocalBase(state.base))
+      toast('注意：HTTP 未加密，管理密码会明文传输', 'bad');
     if ($('remember-config').checked) localStorage.setItem('mgp.connection', JSON.stringify({ base: state.base, token: state.token }));
     else localStorage.removeItem('mgp.connection');
   });
@@ -600,7 +605,7 @@ $('apply-backend-update').addEventListener('click', () => wrap('update-error', a
 }));
 
 /* ---------- UI Release 检查 ---------- */
-const UI_VERSION = 'v0.3.1';
+const UI_VERSION = 'v0.3.2';
 async function checkUi() {
   const repo = $('ui-repository').value.trim();
   if (!repo) { notice('ui-update-status', '未配置仓库，不向 GitHub 请求。', 'neutral'); return; }
