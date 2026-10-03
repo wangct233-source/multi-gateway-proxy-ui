@@ -1,7 +1,7 @@
 'use strict';
 const $ = id => document.getElementById(id);
 const state = {base: '', token: '', gateway: null, gateways: [], caps: {}, settings: {}, kill: true, epoch: 0, backendVersion: '', updateState: 'unknown'};
-const names = {'a-cn': 'G1 · A 国内', 'a-intl': 'G2 · A 国际', b: 'G3 · B', c: 'G4 · C'};
+const names = {'a-cn': 'A-1 腾讯国内', 'a-intl': 'A-2 腾讯国际', b: 'B TRAE CN', c: 'C Zcode'};
 const safe = value => {
   const blocked = /^(token|password|authorization|secret|access_token|refresh_token|proxy_url|endpoint)$/i;
   if (Array.isArray(value)) return value.map(safe);
@@ -59,8 +59,20 @@ function drawSettings(data) {state.settings=data;const mapping={concurrency:'set
 function drawCaps(data) {state.caps=data.capabilities||{};$('capabilities-list').replaceChildren();Object.entries(state.caps).forEach(([name,c])=>{const d=document.createElement('div');const h=document.createElement('h3');h.textContent=name+' · '+c.status;const pre=document.createElement('pre');pre.textContent=json(c);d.append(h,pre);$('capabilities-list').append(d);});$('capabilities-status').textContent='源码能力与当前 Python 实现分别验收，缺证据不伪成功。';guard();}
 function drawRuns(data) {$('tasks-body').replaceChildren();(data.runs||[]).forEach(r=>{const tr=document.createElement('tr');[r.id+' / '+r.gateway_id,r.task_type+' / '+r.status,date(r.started_at),date(r.finished_at),typeof r.result_json==='string'?r.result_json:json(r.result_json)].forEach(v=>tr.append(cell(v)));$('tasks-body').append(tr);});$('tasks-status').textContent=(data.runs||[]).length+' 条记录（含 dry-run，不等于成功领取）。';}
 function guard() {const c=state.caps[$('task-type').value]||{};const allowed=!state.kill&&state.settings.tasks_enabled&&c.status==='supported'&&Array.isArray(c.evidence)&&c.evidence.length;const dry=$('task-dry-run').checked;$('run-task').disabled=!state.gateway||(!dry&&!allowed);$('run-task').textContent=dry?'运行 dry-run 预检':'请求真实执行';$('task-guard').textContent=dry?'只发送预检，不触发上游。':allowed?'仍须后端检查窗口、额度与幂等。':'缺少开关/证据授权，真实执行已阻断。';}
-async function select(id) {state.gateway=id;const epoch=++state.epoch;state.caps={};state.settings={};['accounts-body','egress-body','tasks-body','capabilities-list'].forEach(key=>$(key).replaceChildren());$('settings-fields').disabled=true;$('task-result').hidden=true;guard();drawGateways({gateways:state.gateways});const g=state.gateways.find(g=>g.id===id);if(g)drawMetrics(g);await refreshSelected(epoch);}
-async function refreshSelected(epoch=state.epoch) {if(!state.gateway)return;const base=gwPath();await Promise.all([['accounts',drawAccounts],['egress',drawEgress],['settings',drawSettings],['capabilities',drawCaps],['tasks',drawRuns]].map(async([r,draw])=>{notice(r+'-error','');try{const data=await api(base+'/'+r);if(epoch===state.epoch)draw(data);}catch(e){if(epoch===state.epoch)notice(r+'-error',e.message);}}));}
+async function select(id) {state.gateway=id;const epoch=++state.epoch;state.caps={};state.settings={};['accounts-body','egress-body','tasks-body','capabilities-list','models-body','usage-recent-body'].forEach(key=>$(key).replaceChildren());$('settings-fields').disabled=true;$('task-result').hidden=true;guard();drawGateways({gateways:state.gateways});const g=state.gateways.find(g=>g.id===id);if(g)drawMetrics(g);updateCreditsVisibility();await refreshSelected(epoch);}
+function updateCreditsVisibility(){const isA=state.gateway==='a-cn'||state.gateway==='a-intl';$('query-credits').style.display=isA?'':'none';$('credits-note').textContent=isA?'查询走上游计费域（5 分钟缓存）。':'仅 A-1 腾讯国内 / A-2 腾讯国际有余额查询协议。';}
+function drawModels(data){$('models-body').replaceChildren();(data.models||[]).forEach(m=>{const tr=document.createElement('tr');tr.append(cell(m));$('models-body').append(tr);});if(!(data.models||[]).length){const tr=document.createElement('tr');tr.append(cell('（未配置模型清单：后端 *_MODELS 环境变量）'));$('models-body').append(tr);}}
+function drawUsage(data){
+  $('usage-summary').replaceChildren();
+  [['24h 请求',data.total],['成功',data.ok],['失败',data.failed],['流式',data.streamed],['平均耗时 ms',data.avg_ms],['成功率',data.success_rate==null?'—':(data.success_rate*100).toFixed(1)+'%']].forEach(([label,value])=>{const d=document.createElement('div');d.className='metric';const p=document.createElement('p');p.textContent=label;const s=document.createElement('strong');s.textContent=value;d.append(p,s);$('usage-summary').append(d);});
+  const cooling=(data.model_cooldowns||[]).map(([m,s])=>m+'('+s+'s)').join('、');
+  if(cooling)notice('usage-error','模型冷却中：'+cooling,'warning');else notice('usage-error','');
+  drawModels({models:data.models||[]});
+  $('usage-recent-body').replaceChildren();
+  (data.recent||[]).forEach(r=>{const tr=document.createElement('tr');tr.append(cell(date(r.created_at)),cell(r.account_id||'—'),cell(r.status_code),cell(Math.round(r.duration_ms||0)),cell(r.streamed?'是':'否'),cell(r.error_class||''));$('usage-recent-body').append(tr);});
+  if(!(data.recent||[]).length){const tr=document.createElement('tr');const td=cell('暂无请求记录');td.colSpan=6;tr.append(td);$('usage-recent-body').append(tr);}
+}
+async function refreshSelected(epoch=state.epoch) {if(!state.gateway)return;const base=gwPath();await Promise.all([['accounts',drawAccounts],['egress',drawEgress],['settings',drawSettings],['capabilities',drawCaps],['tasks',drawRuns],['usage',drawUsage]].map(async([r,draw])=>{notice(r+'-error','');try{const data=await api(base+'/'+r);if(epoch===state.epoch)draw(data);}catch(e){if(epoch===state.epoch)notice(r+'-error',e.message);}}));}
 async function refreshAll() {const data=await api('/api/v1/gateways');drawGateways(data);drawKill(await api('/api/v1/tasks/kill-switch'));drawBackendUpdate(await api('/api/v1/version'));if(!state.gateway&&state.gateways.length)await select(state.gateways[0].id);else {const g=state.gateways.find(x=>x.id===state.gateway);if(g)drawMetrics(g);await refreshSelected();}}
 const UPDATE_STATES=['disabled','idle','up_to_date','available','pending','draining','applying','applied','rolled_back','failed'];
 const UPDATE_LABELS={disabled:'未启用',idle:'未配置',up_to_date:'已是最新',available:'有新版本',pending:'更新中',draining:'排空中',applying:'应用中',applied:'已更新',rolled_back:'已回滚',failed:'检查失败'};
@@ -121,6 +133,27 @@ $('import-form').addEventListener('submit',e=>{e.preventDefault();wrap('accounts
   notice('accounts-error',r.imported?('导入成功 '+r.imported+' 个'+(r.skipped?('，跳过 '+r.skipped+' 个（'+(detail||'重复')+'）'):'')+'。'):'全部跳过：'+(detail||'没有可识别的凭据'),'warning');
   await refreshSelected();
 });});
+async function runGatewayTask(kind){
+  const r=await api(gwPath()+'/tasks/'+kind+'/run','POST',{dry_run:false,account_id:null});
+  const items=(r.results||[]).map(x=>x.account_id+':'+(x.status||x.reason||'?')+(x.business_code!==undefined?('(code='+x.business_code+')'):''));
+  return (r.status? '状态='+r.status+'；':'')+(items.join('；')||'无账号或未执行');
+}
+$('gw-checkin').addEventListener('click',()=>wrap('gw-task-status',async()=>{
+  if(!confirm('对本网关全部账号执行签到？按本上游策略间隔错峰。'))return;
+  notice('gw-task-status',await runGatewayTask('checkin'),'neutral');
+  await refreshSelected();
+}));
+$('gw-claim').addEventListener('click',()=>wrap('gw-task-status',async()=>{
+  if(!confirm('请求领取奖励？缺少协议证据的网关会明确返回 501，不会伪造成功。'))return;
+  notice('gw-task-status',await runGatewayTask('claim'),'neutral');
+  await refreshSelected();
+}));
+$('query-credits').addEventListener('click',()=>wrap('credits-result',async()=>{
+  const r=await api(gwPath()+'/credits');
+  if(!r.available){notice('credits-result',r.note||'上游未返回套餐数据。','warning');return;}
+  const c=r.credits;
+  notice('credits-result','剩余 '+c.remain+' / 已用 '+c.used+' / 总量 '+c.size+'（'+c.packages+' 个套餐，账号 '+r.account_id+'，缓存 5 分钟）。','success');
+}));
 $('batch-checkin').addEventListener('click',()=>wrap('batch-status',async()=>{
   if(!confirm('对全部网关执行批量签到？各网关按自己的策略间隔错峰执行，仍受证据与限额约束。'))return;
   const r=await api('/api/v1/tasks/batch-run','POST',{task_type:'checkin'});
