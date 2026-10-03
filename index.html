@@ -22,8 +22,8 @@
       <button class="pill" data-view="settings">全局设置与更新</button>
     </nav>
     <div class="side-foot">
-      <span id="connection-status" class="badge off" role="status">未连接</span>
-      <span class="badge off">UI v0.2.0</span>
+      <span id="connection-status" class="badge off" role="status">未登录</span>
+      <span class="badge off">UI v0.3.0</span>
     </div>
   </aside>
 
@@ -34,12 +34,13 @@
     <section class="card conn" id="conn-card">
       <form id="connection-form" class="conn-form">
         <label>后端 baseURL<input id="base-url" type="url" placeholder="留空 = 同源" spellcheck="false" autocomplete="off"></label>
-        <label>管理 token<input id="api-token" type="password" required autocomplete="off" spellcheck="false"></label>
+        <label>管理密码<input id="api-token" type="password" required autocomplete="current-password" spellcheck="false" placeholder="默认 admin"></label>
         <label class="check"><input id="remember-config" type="checkbox">记住</label>
-        <button id="connect-button" type="submit">连接</button>
+        <button id="connect-button" type="submit">登录</button>
         <button id="clear-storage" type="button" class="ghost">清除本地</button>
       </form>
       <p id="connection-error" class="notice bad" role="alert" hidden></p>
+      <p class="hint">默认密码 admin，登录后请尽快到「全局设置与更新」修改；连续错 5 次将锁定 1 分钟。</p>
     </section>
 
     <!-- 全局监控 -->
@@ -186,6 +187,18 @@
           <p id="update-error" class="notice bad" role="alert" hidden></p>
           <details><summary>原始状态（脱敏）</summary><pre id="backend-update-json" class="logbox">未加载</pre></details>
         </div>
+      </div>
+      <div class="card">
+        <div class="tools"><h3>修改管理密码</h3><span id="admin-pass-badge" class="badge warn" hidden>默认密码 admin</span></div>
+        <form id="admin-pass-form" class="conn-form">
+          <label>当前密码<input id="pass-old" type="password" required autocomplete="current-password" spellcheck="false"></label>
+          <label>新密码（至少 6 位）<input id="pass-new" type="password" required minlength="6" maxlength="128" autocomplete="new-password" spellcheck="false"></label>
+          <label>确认新密码<input id="pass-new2" type="password" required autocomplete="new-password" spellcheck="false"></label>
+          <button type="submit" class="primary backend-write">修改密码</button>
+        </form>
+        <p id="pass-status" class="notice neutral" role="status" hidden></p>
+        <p id="pass-error" class="notice bad" role="alert" hidden></p>
+        <p class="hint">改完立即生效：本页自动换用新密码；其他设备需用新密码重新登录。忘记密码只能用服务器 .env 的 ADMIN_TOKEN 应急钥匙救援。</p>
       </div>
       <div class="card">
         <div class="tools"><h3>UI 版本 · Release 检查</h3></div>

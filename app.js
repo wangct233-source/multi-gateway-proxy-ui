@@ -76,19 +76,38 @@ document.querySelectorAll('#gw-tabs .pill').forEach(b => b.addEventListener('cli
 }));
 function setTab(tab) { const b = document.querySelector('#gw-tabs .pill[data-tab="' + tab + '"]'); if (b) b.click(); }
 
-/* ---------- 连接 ---------- */
+/* ---------- 登录（管理密码） ---------- */
 function setConnected(ok, text) { const el = $('connection-status'); el.textContent = text; el.className = 'badge ' + (ok ? 'ok' : 'off'); }
+function setDefaultBadge(isDefault) {
+  const el = $('admin-pass-badge'); if (!el) return;
+  el.hidden = !isDefault;
+  if (isDefault) { el.textContent = '默认密码 admin，请修改'; el.className = 'badge warn'; }
+}
+async function login(password) {
+  let r;
+  try { r = await api('/api/v1/auth/login', 'POST', { password }); }
+  catch (e) {
+    const m = e.message || '';
+    if (m.includes('Wrong password')) throw Error('密码错误');
+    if (m.includes('too_many_attempts')) throw Error('失败次数过多，请 1 分钟后再试');
+    throw e;
+  }
+  setDefaultBadge(!!r.default_password);
+  if (r.default_password) toast('你还在用默认密码 admin，请到「全局设置与更新」修改', 'bad');
+  return r;
+}
 $('connection-form').addEventListener('submit', e => {
   e.preventDefault();
   wrap('connection-error', async () => {
     const raw = $('base-url').value.trim();
     state.base = raw ? baseUrl(raw) : location.origin;
     state.token = $('api-token').value.trim();
-    if (!state.token) throw Error('请填写管理 token');
+    if (!state.token) throw Error('请填写管理密码');
+    await login(state.token);
     await refreshAll();
     enabled(true);
-    setConnected(true, '已连接');
-    toast('已连接 ' + state.base, 'ok');
+    setConnected(true, '已登录');
+    toast('登录成功', 'ok');
     if ($('remember-config').checked) localStorage.setItem('mgp.connection', JSON.stringify({ base: state.base, token: state.token }));
     else localStorage.removeItem('mgp.connection');
   });
@@ -96,8 +115,33 @@ $('connection-form').addEventListener('submit', e => {
 $('clear-storage').addEventListener('click', () => {
   localStorage.removeItem('mgp.connection');
   state.token = ''; $('api-token').value = '';
-  enabled(false); setConnected(false, '未连接');
-  toast('已移除本地 Token');
+  enabled(false); setConnected(false, '未登录');
+  toast('已移除本地保存的密码');
+});
+
+/* ---------- 修改管理密码 ---------- */
+$('admin-pass-form').addEventListener('submit', e => {
+  e.preventDefault();
+  wrap('pass-error', async () => {
+    const oldp = $('pass-old').value, p1 = $('pass-new').value, p2 = $('pass-new2').value;
+    if (p1 !== p2) throw Error('两次输入的新密码不一致');
+    if (p1.length < 6) throw Error('新密码至少 6 位');
+    if (p1 === oldp) throw Error('新密码不能和当前密码相同');
+    let r;
+    try { r = await api('/api/v1/auth/password', 'POST', { old_password: oldp, new_password: p1 }); }
+    catch (err) {
+      const m = err.message || '';
+      if (m.includes('wrong_old_password')) throw Error('当前密码不正确');
+      if (m.includes('weak_password')) throw Error('新密码须 6-128 位');
+      throw err;
+    }
+    state.token = p1;
+    $('pass-old').value = ''; $('pass-new').value = ''; $('pass-new2').value = '';
+    setDefaultBadge(!!r.default_password);
+    if ($('remember-config').checked) localStorage.setItem('mgp.connection', JSON.stringify({ base: state.base, token: p1 }));
+    notice('pass-status', '密码已修改并立即生效；其他设备需用新密码重新登录。', 'neutral');
+    toast('管理密码已修改', 'ok');
+  });
 });
 
 /* ---------- 全局监控 ---------- */
@@ -218,12 +262,13 @@ const accClassLabel = { ok: '可用', cooldown: '冷却中', disabled: '已停�
 function drawAccounts(data) {
   state.accounts = data.accounts || [];
   $('accounts-status').textContent = state.accounts.length + ' 个';
-  const choice = $('task-account'); choice.replaceChildren();
-  const all = document.createElement('option'); all.value = ''; all.textContent = '全部账号'; choice.append(all);
   renderAccountGrid();
 }
 function renderAccountGrid() {
   const grid = $('accounts-grid'); grid.replaceChildren();
+  const choice = $('task-account'); choice.replaceChildren();
+  const all = document.createElement('option'); all.value = ''; all.textContent = '全部账号'; choice.append(all);
+  state.accounts.forEach(a => { const o = document.createElement('option'); o.value = a.id; o.textContent = a.id; choice.append(o); });
   const kw = state.search.trim().toLowerCase();
   const list = state.accounts.filter(a => {
     if (state.filter && accClass(a) !== state.filter) return false;
@@ -250,7 +295,6 @@ function renderAccountGrid() {
     })));
     card.append(btns);
     grid.append(card);
-    const o = document.createElement('option'); o.value = a.id; o.textContent = a.id; choice.append(o);
   });
 }
 $('account-search').addEventListener('input', e => { state.search = e.target.value; renderAccountGrid(); });
@@ -556,7 +600,7 @@ $('apply-backend-update').addEventListener('click', () => wrap('update-error', a
 }));
 
 /* ---------- UI Release 检查 ---------- */
-const UI_VERSION = 'v0.2.0';
+const UI_VERSION = 'v0.3.0';
 async function checkUi() {
   const repo = $('ui-repository').value.trim();
   if (!repo) { notice('ui-update-status', '未配置仓库，不向 GitHub 请求。', 'neutral'); return; }
