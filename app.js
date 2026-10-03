@@ -121,6 +121,19 @@ $('import-form').addEventListener('submit',e=>{e.preventDefault();wrap('accounts
   notice('accounts-error',r.imported?('导入成功 '+r.imported+' 个'+(r.skipped?('，跳过 '+r.skipped+' 个（'+(detail||'重复')+'）'):'')+'。'):'全部跳过：'+(detail||'没有可识别的凭据'),'warning');
   await refreshSelected();
 });});
+$('batch-checkin').addEventListener('click',()=>wrap('batch-status',async()=>{
+  if(!confirm('对全部网关执行批量签到？各网关按自己的策略间隔错峰执行，仍受证据与限额约束。'))return;
+  const r=await api('/api/v1/tasks/batch-run','POST',{task_type:'checkin'});
+  const parts=Object.entries(r.results||{}).map(([g,x])=>{
+    if(x.status==='blocked')return g+'：被门禁阻断';
+    if(x.status==='evidence_required')return g+'：证据不足';
+    if(x.status==='failed')return g+'：失败';
+    const ok=(x.results||[]).filter(y=>y.ok).length, total=(x.results||[]).length;
+    return g+'：'+ok+'/'+total+' 成功';
+  });
+  notice('batch-status','批量签到完成（执行 '+r.executed_gateways+' 个网关）：'+parts.join('；'),'neutral');
+  await refreshSelected();
+}));
 $('check-backend-update').addEventListener('click',()=>wrap('update-error',async()=>{drawBackendUpdate({version:state.backendVersion||'0.0.0',updates:await api('/api/updates/check','POST',{})});}));
 $('apply-backend-update').addEventListener('click',()=>wrap('update-error',async()=>{if(!confirm('立即更新到候选版本？期间会优雅排空在途请求并切换代码，服务可能短暂中断；失败会自动回滚。'))return;drawBackendUpdate({version:state.backendVersion||'0.0.0',updates:await api('/api/updates/apply','POST',{})});}));
 document.querySelectorAll('[data-tab]').forEach(b=>b.addEventListener('click',()=>{document.querySelectorAll('[data-tab]').forEach(t=>{const active=t===b;t.setAttribute('aria-selected',String(active));t.tabIndex=active?0:-1;$('panel-'+t.dataset.tab).hidden=!active;});}));

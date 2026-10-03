@@ -106,6 +106,8 @@
 
         <section id="panel-tasks" class="card tab-panel" role="tabpanel" aria-labelledby="tab-tasks" hidden>
           <h2>手动任务与运行记录</h2><p class="notice warning">默认只做 dry-run 预检，不进行真实自动任务。HTTP 200 不代表 allowed:true，更不代表任务成功；501 evidence_required 明确显示证据不足。</p>
+          <div class="update-actions"><button id="batch-checkin" type="button" class="primary backend-write" disabled>一键批量签到（全部网关）</button><small>逐网关执行，按各上游策略间隔错峰；仍受杀开关/证据/窗口/每日限额约束。</small></div>
+          <p id="batch-status" class="notice neutral" role="status" hidden></p>
           <form id="task-form" class="subform">
             <div class="form-grid"><label>任务类型<select id="task-type"><option value="checkin">checkin · 签到</option><option value="claim">claim · 领取</option><option value="activity">activity · 活动</option></select></label><label>账号范围<select id="task-account"><option value="">全部账号（account_id:null）</option></select></label></div>
             <label class="check"><input id="task-dry-run" type="checkbox" checked>仅预检 dry_run:true（推荐）</label>
