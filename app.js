@@ -64,7 +64,7 @@ function showView(name) {
   $('view-monitor').hidden = name !== 'monitor';
   $('view-gateway').hidden = !(name in names);
   $('view-settings').hidden = name !== 'settings';
-  if (name in names && state.gateway !== name) select(name);
+  if (name in names && state.gateway !== name) select(name).catch(e => toast(e.message || '加载失败', 'bad'));
 }
 $('nav').addEventListener('click', e => {
   const b = e.target.closest('.pill'); if (b) showView(b.dataset.view);
@@ -600,7 +600,7 @@ $('apply-backend-update').addEventListener('click', () => wrap('update-error', a
 }));
 
 /* ---------- UI Release 检查 ---------- */
-const UI_VERSION = 'v0.3.0';
+const UI_VERSION = 'v0.3.1';
 async function checkUi() {
   const repo = $('ui-repository').value.trim();
   if (!repo) { notice('ui-update-status', '未配置仓库，不向 GitHub 请求。', 'neutral'); return; }
