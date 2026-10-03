@@ -1,7 +1,7 @@
 'use strict';
-/* 多网关控制台 · 纯静态 UI v0.2.0
- * 布局参考 ZcodeKnight（深色/卡片/胶囊导航/状态色条），
- * 交互参考 sub2api（工具条搜索筛选/批量操作/危险操作确认）。
+/* 多网关控制台 · 纯静态 UI v0.4.0
+ * 安静的调度控制台：深墨蓝底 / 发丝描边 / 暖橙单点缀 / 等宽数字 / 极轻动效，暗亮双主题。
+ * 总览页用量分析三块：模型分布（清单+冷却）、用量趋势（近 24h 请求）、最近使用 Top12（账号）。
  */
 const $ = id => document.getElementById(id);
 const state = {
@@ -68,6 +68,7 @@ function showView(name) {
   $('view-gateway').hidden = !(name in names);
   $('view-settings').hidden = name !== 'settings';
   if (name in names && state.gateway !== name) select(name).catch(e => toast(e.message || '加载失败', 'bad'));
+  if (name === 'monitor' && state.base && state.token) loadAnalysis(false);
 }
 $('nav').addEventListener('click', e => {
   const b = e.target.closest('.pill'); if (b) showView(b.dataset.view);
@@ -78,6 +79,22 @@ document.querySelectorAll('#gw-tabs .pill').forEach(b => b.addEventListener('cli
   if (b.dataset.tab === 'settings') $('settings-fields').disabled = !state.base;
 }));
 function setTab(tab) { const b = document.querySelector('#gw-tabs .pill[data-tab="' + tab + '"]'); if (b) b.click(); }
+
+/* ---------- 主题（暗 / 亮） ---------- */
+function applyTheme(theme) {
+  const light = theme === 'light';
+  document.documentElement.dataset.theme = light ? 'light' : 'dark';
+  // SVG 元素没有 hidden IDL 属性，用 class 切换图标显隐。
+  $('icon-moon').classList.toggle('ioff', light);
+  $('icon-sun').classList.toggle('ioff', !light);
+  try { localStorage.setItem('mgp.theme', light ? 'light' : 'dark'); } catch { /* 隐私模式忽略 */ }
+}
+$('theme-toggle').addEventListener('click', () => {
+  applyTheme(document.documentElement.dataset.theme === 'light' ? 'dark' : 'light');
+});
+let savedTheme = null;
+try { savedTheme = localStorage.getItem('mgp.theme'); } catch { /* 隐私模式忽略 */ }
+applyTheme(savedTheme === 'light' ? 'light' : 'dark');
 
 /* ---------- 登录（管理密码） ---------- */
 function setConnected(ok, text) { const el = $('connection-status'); el.textContent = text; el.className = 'badge ' + (ok ? 'ok' : 'off'); }
@@ -150,8 +167,9 @@ $('admin-pass-form').addEventListener('submit', e => {
 });
 
 /* ---------- 全局监控 ---------- */
+const GW_OK = ['ready', 'ok'];   // 后端网关/账号正常态为 "ready"
 function gwCardClass(g) {
-  if (g.status !== 'ok') return 'bad';
+  if (!GW_OK.includes(g.status)) return 'bad';
   if ((g.cooldowns || 0) > 0 || (g.queued || 0) >= (g.queue_limit || 0)) return 'warn';
   return 'ok';
 }
@@ -159,7 +177,7 @@ function drawMonitorCard(g) {
   const d = document.createElement('div'); d.className = 'gwcard ' + gwCardClass(g);
   const head = document.createElement('div'); head.className = 'head';
   const h = document.createElement('h3'); h.textContent = names[g.id] || g.name;
-  const badge = document.createElement('span'); badge.className = 'badge ' + (g.status === 'ok' ? 'ok' : 'bad'); badge.textContent = g.status;
+  const badge = document.createElement('span'); badge.className = 'badge ' + (GW_OK.includes(g.status) ? 'ok' : 'bad'); badge.textContent = g.status;
   head.append(h, badge); d.append(head);
   const mono = document.createElement('p'); mono.className = 'mono'; mono.textContent = '出口 /' + (g.path || g.id); d.append(mono);
   const grid = document.createElement('div'); grid.className = 'grid kpis';
@@ -200,6 +218,126 @@ $('batch-checkin').addEventListener('click', () => wrap('batch-status', async ()
   notice('batch-status', '批量签到完成（执行 ' + r.executed_gateways + ' 个网关）：' + parts.join('；'), 'neutral');
   await refreshCurrent();
 }));
+
+/* ---------- 总览页 · 用量分析（用量趋势 / 模型分布 / 最近使用 Top12） ----------
+ * 数据全部来自现有 GET /api/v1/gateways/{id}/usage（四路并取、前端合并）。
+ * 后端未记录按请求的模型名与 Token 数，因此：
+ *  - 模型分布 = 各网关模型清单 + 当前冷却状态；
+ *  - 用量趋势 = 基于各网关最近 50 条记录的小时级请求数（成功/失败堆叠）；
+ *  - Top12 = 账号维度（请求数 / 成功率 / 最近活跃）。
+ */
+const GW_SHORT = { 'a-cn': 'A-1', 'a-intl': 'A-2', b: 'B', c: 'C' };
+let analysisAt = 0, analysisBusy = false;
+function ago(ts) {
+  const s = Math.max(0, Math.floor(Date.now() / 1000 - ts));
+  if (s < 60) return s + ' 秒前';
+  if (s < 3600) return Math.floor(s / 60) + ' 分钟前';
+  if (s < 86400) return Math.floor(s / 3600) + ' 小时前';
+  return Math.floor(s / 86400) + ' 天前';
+}
+async function loadAnalysis(force = false) {
+  if (!state.base || !state.token || analysisBusy) return;
+  if (!force && Date.now() - analysisAt < 20000) return;
+  analysisAt = Date.now(); analysisBusy = true;
+  try {
+    const results = await Promise.all(GWS.map(g => api('/api/v1/gateways/' + g + '/usage').catch(() => null)));
+    const bundles = GWS.map((g, i) => ({ gid: g, data: results[i] })).filter(b => b.data);
+    if (!bundles.length) return;
+    drawTrend(bundles); drawModelDist(bundles); drawTop(bundles);
+  } finally { analysisBusy = false; }
+}
+function drawTrend(bundles) {
+  const startHour = Math.floor(Date.now() / 1000 / 3600) * 3600 - 23 * 3600;
+  const buckets = Array.from({ length: 24 }, (_, i) => ({ t: startHour + i * 3600, ok: 0, bad: 0 }));
+  let total = 0, okSum = 0, failed = 0;
+  bundles.forEach(b => {
+    total += b.data.total || 0; okSum += b.data.ok || 0; failed += b.data.failed || 0;
+    (b.data.recent || []).forEach(r => {
+      const idx = Math.floor((r.created_at - startHour) / 3600);
+      if (idx < 0 || idx > 23) return;
+      if (r.status_code < 400) buckets[idx].ok += 1; else buckets[idx].bad += 1;
+    });
+  });
+  const W = 720, H = 150, baseY = H - 22, plotH = baseY - 8;
+  const max = Math.max(1, ...buckets.map(x => x.ok + x.bad));
+  const bw = (W - 23 * 4) / 24;
+  let bars = '';
+  buckets.forEach((x, i) => {
+    const bx = i * (bw + 4), n = x.ok + x.bad;
+    const label = String(new Date(x.t * 1000).getHours()).padStart(2, '0') + ':00';
+    const tip = label + ' · ' + n + ' 请求' + (x.bad ? ' · ' + x.bad + ' 失败' : '');
+    if (!n) {
+      bars += '<rect class="zero" x="' + bx.toFixed(1) + '" y="' + (baseY - 2) + '" width="' + bw.toFixed(1) + '" height="2" rx="1"><title>' + tip + '</title></rect>';
+    } else {
+      const okH = x.ok / max * plotH, badH = x.bad / max * plotH;
+      bars += '<g>' +
+        (okH ? '<rect x="' + bx.toFixed(1) + '" y="' + (baseY - okH).toFixed(1) + '" width="' + bw.toFixed(1) + '" height="' + okH.toFixed(1) + '" rx="1.5" fill="var(--teal)"/>' : '') +
+        (badH ? '<rect x="' + bx.toFixed(1) + '" y="' + (baseY - okH - badH).toFixed(1) + '" width="' + bw.toFixed(1) + '" height="' + badH.toFixed(1) + '" rx="1.5" fill="var(--coral)"/>' : '') +
+        '<title>' + tip + '</title></g>';
+    }
+    if (i % 4 === 0) bars += '<text class="axis" x="' + bx.toFixed(1) + '" y="' + (H - 7) + '">' + label + '</text>';
+  });
+  $('trend-chart').innerHTML = '<svg viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="近 24 小时请求量">' +
+    '<line class="baseline" x1="0" y1="' + baseY + '" x2="' + W + '" y2="' + baseY + '"/>' + bars + '</svg>';
+  $('trend-legend').innerHTML =
+    '<span class="key"><i class="sw ok"></i>成功</span>' +
+    '<span class="key"><i class="sw bad"></i>失败</span>' +
+    '<span class="stat">24h 合计 ' + total + ' 请求 · 成功率 ' + (total ? (okSum / total * 100).toFixed(1) + '%' : '—') + (failed ? ' · 失败 ' + failed : '') + '</span>';
+}
+function drawModelDist(bundles) {
+  const host = $('models-dist'); host.replaceChildren();
+  let count = 0;
+  bundles.forEach(b => {
+    const cool = new Map(b.data.model_cooldowns || []);
+    const models = b.data.models || [];
+    count += models.length;
+    const row = document.createElement('div'); row.className = 'model-row';
+    const tag = document.createElement('span'); tag.className = 'gw-tag'; tag.textContent = GW_SHORT[b.gid] || b.gid;
+    const chips = document.createElement('div'); chips.className = 'chips';
+    if (!models.length) { const p = document.createElement('span'); p.className = 'hint'; p.textContent = '未配置模型清单（后端 *_MODELS）'; chips.append(p); }
+    models.forEach(m => {
+      const s = document.createElement('span'); s.className = 'chip';
+      const secs = cool.get(m);
+      if (secs) {
+        s.classList.add('cool'); s.title = '冷却中 · 剩余 ' + secs + 's';
+        const dot = document.createElement('i'); dot.className = 'dot';
+        const name = document.createElement('span'); name.textContent = m;
+        s.append(dot, name);
+      } else s.textContent = m;
+      chips.append(s);
+    });
+    const n = document.createElement('span'); n.className = 'count'; n.textContent = models.length + ' 个';
+    row.append(tag, chips, n); host.append(row);
+  });
+  $('models-dist-count').textContent = '共 ' + count + ' 个';
+}
+function drawTop(bundles) {
+  const agg = new Map();
+  bundles.forEach(b => (b.data.recent || []).forEach(r => {
+    if (!r.account_id) return;
+    const key = b.gid + '/' + r.account_id;
+    const a = agg.get(key) || { gid: b.gid, account: r.account_id, n: 0, ok: 0, last: 0 };
+    a.n += 1; if (r.status_code < 400) a.ok += 1; a.last = Math.max(a.last, r.created_at || 0);
+    agg.set(key, a);
+  }));
+  const rows = [...agg.values()].sort((x, y) => y.n - x.n || y.last - x.last).slice(0, 12);
+  const body = $('top-body'); body.replaceChildren();
+  rows.forEach((a, i) => {
+    const tr = document.createElement('tr');
+    const rank = cell(String(i + 1)); rank.className = 'num muted';
+    const gwTd = document.createElement('td');
+    const chip = document.createElement('span'); chip.className = 'chip'; chip.textContent = GW_SHORT[a.gid] || a.gid;
+    gwTd.append(chip);
+    const n = cell(String(a.n)); n.className = 'num';
+    const rate = cell((a.ok / a.n * 100).toFixed(0) + '%'); rate.className = 'num ' + (a.ok === a.n ? 'good' : 'poor');
+    const last = cell(ago(a.last)); last.className = 'num muted';
+    tr.append(rank, cell(a.account), gwTd, n, rate, last);
+    body.append(tr);
+  });
+  if (!rows.length) { const tr = document.createElement('tr'); const td = cell('最近窗口暂无请求记录'); td.colSpan = 6; tr.append(td); body.append(tr); }
+  $('top-count').textContent = rows.length ? rows.length + ' 个账号' : '';
+}
+$('refresh-analysis').addEventListener('click', () => loadAnalysis(true));
 
 /* ---------- 网关视图 ---------- */
 async function select(id) {
@@ -259,7 +397,7 @@ $('account-login').addEventListener('click', () => wrap('login-status', async ()
 function accClass(a) {
   if (!a.enabled) return 'disabled';
   if (a.cooldown_until && new Date(typeof a.cooldown_until === 'number' ? a.cooldown_until * 1000 : a.cooldown_until) > new Date()) return 'cooldown';
-  if (a.status === 'ok' || a.status === 'idle' || a.status === 'active') return 'ok';
+  if (GW_OK.includes(a.status) || a.status === 'idle' || a.status === 'active') return 'ok';
   if (a.status === 'disabled') return 'disabled';
   return a.status ? 'bad' : 'ok';
 }
@@ -510,6 +648,7 @@ async function refreshCurrent() {
   if (state.view === 'monitor') {
     drawGateways(await api('/api/v1/gateways'));
     drawKill(await api('/api/v1/tasks/kill-switch'));
+    await loadAnalysis(false);
   } else if (state.view in names) {
     await refreshSelected();
     const g = state.gateways.find(x => x.id === state.gateway);
@@ -521,7 +660,7 @@ async function refreshCurrent() {
 function drawGwKpis(g) {
   const kp = $('gw-kpis'); kp.replaceChildren();
   kp.append(
-    kpi('状态', g.status, g.status === 'ok' ? 'ok' : 'bad'),
+    kpi('状态', g.status, GW_OK.includes(g.status) ? 'ok' : 'bad'),
     kpi('在途 / 并发', g.active + ' / ' + g.concurrency),
     kpi('排队 / 上限', g.queued + ' / ' + g.queue_limit),
     kpi('账号', g.accounts)
@@ -538,6 +677,7 @@ async function refreshAll() {
     if (g) drawGwKpis(g);
     if (state.view in names) await refreshSelected();
   }
+  if (state.view === 'monitor') await loadAnalysis(true);
 }
 
 /* 5s 可见轮询（仅当前视图，防重入） */
@@ -605,7 +745,7 @@ $('apply-backend-update').addEventListener('click', () => wrap('update-error', a
 }));
 
 /* ---------- UI Release 检查 ---------- */
-const UI_VERSION = 'v0.3.2';
+const UI_VERSION = 'v0.4.0';
 async function checkUi() {
   const repo = $('ui-repository').value.trim();
   if (!repo) { notice('ui-update-status', '未配置仓库，不向 GitHub 请求。', 'neutral'); return; }

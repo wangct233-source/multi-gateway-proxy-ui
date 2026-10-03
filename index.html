@@ -10,20 +10,31 @@
   <script src="./app.js" defer></script>
 </head>
 <body>
+<svg class="defs" aria-hidden="true" focusable="false"><defs>
+  <symbol id="i-monitor" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h3.5l2.5-6 4.5 12 2.5-6H21"/></g></symbol>
+  <symbol id="i-gateway" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="4" width="17" height="6.5" rx="1.8"/><rect x="3.5" y="13.5" width="17" height="6.5" rx="1.8"/><path d="M7 7.25h.01M7 16.75h.01"/></g></symbol>
+  <symbol id="i-settings" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7.5h8M18 7.5h2M4 16.5h2M12 16.5h8"/><circle cx="15" cy="7.5" r="2.2"/><circle cx="9" cy="16.5" r="2.2"/></g></symbol>
+  <symbol id="i-moon" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 13.8A8 8 0 0 1 10.2 4 8 8 0 1 0 20 13.8Z"/></g></symbol>
+  <symbol id="i-sun" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 3.5v1.8M12 18.7v1.8M3.5 12h1.8M18.7 12h1.8M6 6l1.3 1.3M16.7 16.7 18 18M18 6l-1.3 1.3M7.3 16.7 6 18"/></g></symbol>
+</defs></svg>
 <div class="app">
   <aside class="side">
     <div class="brand"><h1>多网关控制台</h1><p>FOUR GATEWAY · 本地静态 UI</p></div>
     <nav class="nav" id="nav">
-      <button class="pill" data-view="monitor">全局监控</button>
-      <button class="pill" data-view="a-cn" data-gw="a-cn">A-1 腾讯国内</button>
-      <button class="pill" data-view="a-intl" data-gw="a-intl">A-2 腾讯国际</button>
-      <button class="pill" data-view="b" data-gw="b">B TRAE CN</button>
-      <button class="pill" data-view="c" data-gw="c">C Zcode</button>
-      <button class="pill" data-view="settings">全局设置与更新</button>
+      <button class="pill" data-view="monitor"><svg class="ico" aria-hidden="true"><use href="#i-monitor"/></svg>全局监控</button>
+      <button class="pill" data-view="a-cn" data-gw="a-cn"><svg class="ico" aria-hidden="true"><use href="#i-gateway"/></svg>A-1 腾讯国内</button>
+      <button class="pill" data-view="a-intl" data-gw="a-intl"><svg class="ico" aria-hidden="true"><use href="#i-gateway"/></svg>A-2 腾讯国际</button>
+      <button class="pill" data-view="b" data-gw="b"><svg class="ico" aria-hidden="true"><use href="#i-gateway"/></svg>B TRAE CN</button>
+      <button class="pill" data-view="c" data-gw="c"><svg class="ico" aria-hidden="true"><use href="#i-gateway"/></svg>C Zcode</button>
+      <button class="pill" data-view="settings"><svg class="ico" aria-hidden="true"><use href="#i-settings"/></svg>全局设置与更新</button>
     </nav>
     <div class="side-foot">
       <span id="connection-status" class="badge off" role="status">未登录</span>
-      <span class="badge off">UI v0.3.2</span>
+      <span class="badge off">UI v0.4.0</span>
+      <button id="theme-toggle" type="button" class="icon-btn" title="切换明暗主题" aria-label="切换明暗主题">
+        <svg id="icon-moon" class="ico" aria-hidden="true"><use href="#i-moon"/></svg>
+        <svg id="icon-sun" class="ico ioff" aria-hidden="true"><use href="#i-sun"/></svg>
+      </button>
     </div>
   </aside>
 
@@ -45,8 +56,33 @@
 
     <!-- 全局监控 -->
     <section class="view" id="view-monitor" hidden>
-      <div class="view-head"><h2>全局监控</h2><p class="sub">四网关实时状态对比 · 每 5 秒自动刷新（仅页面可见时）</p></div>
+      <div class="view-head"><h2>全局监控</h2><p class="sub">四网关实时状态 · 状态每 5 秒 / 用量分析每 20 秒自动刷新（仅页面可见时）</p></div>
       <div class="grid gw-grid" id="monitor-grid"></div>
+
+      <!-- 用量分析三块：趋势 / 模型分布 / 最近使用 Top12（数据来自各网关 /usage） -->
+      <div class="card">
+        <div class="tools">
+          <h3>用量趋势</h3>
+          <span class="hint">近 24 小时请求数 · 基于各网关最近 50 条记录</span>
+          <button id="refresh-analysis" type="button" class="ghost sm">刷新</button>
+        </div>
+        <div id="trend-chart" class="trend-chart"><p class="hint">登录后显示用量分析。</p></div>
+        <div id="trend-legend" class="legend"></div>
+      </div>
+      <div class="grid two-col">
+        <div class="card">
+          <div class="tools"><h3>模型分布</h3><span id="models-dist-count" class="count"></span></div>
+          <div id="models-dist" class="model-rows"><p class="hint">登录后显示。</p></div>
+        </div>
+        <div class="card">
+          <div class="tools"><h3>最近使用 Top12</h3><span id="top-count" class="count"></span></div>
+          <div class="table-wrap"><table>
+            <thead><tr><th>#</th><th>账号</th><th>网关</th><th>请求</th><th>成功率</th><th>最近</th></tr></thead>
+            <tbody id="top-body"></tbody>
+          </table></div>
+        </div>
+      </div>
+
       <div class="card">
         <div class="tools"><h3>全局任务</h3>
           <button id="batch-checkin" type="button" class="primary backend-write" disabled>一键批量签到</button>
