@@ -30,7 +30,7 @@
     </nav>
     <div class="side-foot">
       <span id="connection-status" class="badge off" role="status">未登录</span>
-      <span class="badge off">UI v0.4.0</span>
+      <span class="badge off">UI v0.4.1</span>
       <button id="theme-toggle" type="button" class="icon-btn" title="切换明暗主题" aria-label="切换明暗主题">
         <svg id="icon-moon" class="ico" aria-hidden="true"><use href="#i-moon"/></svg>
         <svg id="icon-sun" class="ico ioff" aria-hidden="true"><use href="#i-sun"/></svg>
@@ -178,13 +178,14 @@
           <form id="settings-form">
             <fieldset id="settings-fields" disabled>
               <div class="form-grid">
-                <label>并发 concurrency<input id="setting-concurrency" type="number" min="1" required></label>
+                <label>每账号并发<input id="setting-account-concurrency" type="number" min="1" required></label>
                 <label>队列上限<input id="setting-queue-limit" type="number" min="0" required></label>
                 <label>排队超时 s<input id="setting-queue-timeout" type="number" min="0.001" step="any" required></label>
                 <label>每日任务限额<input id="setting-task-daily-limit" type="number" min="0" required></label>
                 <label>窗口开始<input id="setting-task-window-start" type="time" step="60" required></label>
                 <label>窗口结束<input id="setting-task-window-end" type="time" step="1" required></label>
               </div>
+              <p class="hint">全局并发 = 启用账号数 × 每账号并发，随账号增删自动伸缩（1 账号×2=2，100 账号×5=500）。</p>
               <label class="check"><input id="setting-tasks-enabled" type="checkbox">启用本网关真实自动任务</label>
               <button id="save-settings" type="submit" class="primary backend-write">保存</button>
             </fieldset>

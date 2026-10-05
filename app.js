@@ -589,7 +589,7 @@ function drawRuns(data) {
 /* 网关设置 */
 function drawSettings(data) {
   state.settings = data;
-  const mapping = { concurrency: 'setting-concurrency', queue_limit: 'setting-queue-limit', queue_timeout: 'setting-queue-timeout', task_daily_limit: 'setting-task-daily-limit', task_window_start: 'setting-task-window-start', task_window_end: 'setting-task-window-end' };
+  const mapping = { account_concurrency: 'setting-account-concurrency', queue_limit: 'setting-queue-limit', queue_timeout: 'setting-queue-timeout', task_daily_limit: 'setting-task-daily-limit', task_window_start: 'setting-task-window-start', task_window_end: 'setting-task-window-end' };
   Object.entries(mapping).forEach(([k, id]) => $(id).value = data[k] ?? '');
   $('setting-tasks-enabled').checked = !!data.tasks_enabled;
   $('settings-fields').disabled = false;
@@ -599,7 +599,7 @@ $('settings-form').addEventListener('submit', e => {
   e.preventDefault();
   wrap('settings-error', async () => {
     const values = {
-      concurrency: Number($('setting-concurrency').value), queue_limit: Number($('setting-queue-limit').value),
+      account_concurrency: Number($('setting-account-concurrency').value), queue_limit: Number($('setting-queue-limit').value),
       queue_timeout: Number($('setting-queue-timeout').value), task_daily_limit: Number($('setting-task-daily-limit').value),
       task_window_start: $('setting-task-window-start').value.slice(0, 5), task_window_end: $('setting-task-window-end').value.slice(0, 5),
       tasks_enabled: $('setting-tasks-enabled').checked
@@ -745,7 +745,7 @@ $('apply-backend-update').addEventListener('click', () => wrap('update-error', a
 }));
 
 /* ---------- UI Release 检查 ---------- */
-const UI_VERSION = 'v0.4.0';
+const UI_VERSION = 'v0.4.1';
 async function checkUi() {
   const repo = $('ui-repository').value.trim();
   if (!repo) { notice('ui-update-status', '未配置仓库，不向 GitHub 请求。', 'neutral'); return; }
